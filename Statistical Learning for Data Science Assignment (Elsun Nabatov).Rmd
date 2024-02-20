@@ -1,5 +1,5 @@
 ---
-title: 'Statistical Learning for Data Science Assignment'
+title: 'Statistical Learning for Data Science'
 author: "Elsun Nabatov"
 date: "2023-11-30"
 output: pdf_document
