@@ -1,0 +1,709 @@
+---
+title: 'Statistical Learning for Data Science Assignment'
+author: "Elsun Nabatov"
+date: "2023-11-30"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+
+```{r include=FALSE}
+# Set the CRAN mirror
+options(repos = c(CRAN = "https://cran.rstudio.com/"))
+
+# Install necessary packages
+install.packages("mlbench")
+
+```
+
+
+**Introduction**
+
+In this analysis, we delve into the realm of predictive modeling for the Breast Cancer dataset, exploring various statistical techniques to discern the most effective classifier. Our journey encompasses an array of methods, including Best Subset Cross Validation, Lasso Regression, Linear Discriminant Analysis (LDA), and Quadratic Discriminant Analysis (QDA), each bringing unique perspectives to the table. The goal is to not only identify the classifier that offers the highest accuracy but also to understand the underlying complexities and interactions in the dataset, ensuring a robust and informed choice for cancer prediction.
+
+
+
+**Part 1**
+
+
+
+**Data Cleaning and Pre-processing**
+
+We have Breast Cancer dataset with 699 observations. With this raw data, we will do pre-processing and removing NA values, also converting data types.
+
+
+***Converting Factors to Quantitative Variables***
+
+
+In "class" column we have "malignant" and "benign" which are converted to 1 and 0 respectively and changed data format.
+
+```{r}
+library(mlbench)
+
+# Load the BreastCancer dataset
+data(BreastCancer)
+
+# Convert factors to quantitative variables
+BreastCancer[, 2:10] <- lapply(BreastCancer[2:10], function(x) as.numeric(as.character(x)))
+
+# Convert Class variable: malignant to 1, benign to 0
+BreastCancer$Class <- ifelse(BreastCancer$Class == "malignant", 1, 0)
+```
+
+
+
+
+
+***Remove NA values***
+
+
+
+I removed 16 NA values and "Id" column from Breast Cancer dataset.
+
+
+```{r include=FALSE}
+library(dplyr)
+
+# Remove rows with missing values
+BreastCancer <- na.omit(BreastCancer)
+
+# Assuming the ID column is named 'Id'
+BreastCancer <- BreastCancer %>% dplyr::select(-Id)
+```
+
+
+After all process, we are checking dataset structure.
+
+```{r}
+str(BreastCancer)
+```
+
+
+
+**Part 2**
+
+
+
+**Explotary Data Analysis**
+
+
+
+***Correlation Matrix***
+
+
+The heatmap (with correlation matrix) indicates a strong positive correlation between predictor variables in the Breast Cancer dataset, with 'Cell.size' and 'Cell.shape' demonstrating a particularly high correlation of 0.91, suggesting multicollinearity. Lesser but still significant positive correlations are observed, such as 'Bl.Cromatin' with 'Cell.size' at 0.76, and 'Cell.size' with 'Epith.c.size' at 0.75, hinting at possible shared biological attributes or measurement interactions, with no evident strong negative correlations across the variables.
+
+
+```{r out.width="50%"}
+
+library(ggplot2)
+
+# Assuming BreastCancer is your data frame
+# Exclude the 'Class' column from the correlation calculation
+numeric_data <- BreastCancer[, sapply(BreastCancer, is.numeric)]
+numeric_data_without_class <- numeric_data[, !colnames(numeric_data) %in% c("Class")]
+
+# Calculate correlation on the numeric data without the 'Class' column
+correlation_matrix <- cor(numeric_data_without_class)
+
+# Prepare the data for ggplot
+correlation_data <- as.data.frame(as.table(correlation_matrix))
+
+# Create a heatmap and add the text without the 'Class' column
+ggplot(correlation_data, aes(Var1, Var2, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = sprintf("%.2f", Freq)), size = 3, vjust = 1) +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1,1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(fill = "Correlation")
+
+```
+
+
+
+
+**PART 3**
+
+By standardizing the first nine columns, which are the predictor variables, then extracting the tenth column as the response variable. This standardized data and the response are then combined into a new dataframe called 'Breast_data'.
+
+
+```{r}
+## Pick out and scale predictor variables
+X1orig = BreastCancer[,1:9]
+X1 = scale(X1orig)
+# Pick out response variable
+y = BreastCancer[,10]
+## Combine to create new data frame
+Breast_data = data.frame(X1, y)
+## Print first few rows:
+#head(Breast_data)
+
+n = nrow(X1); p = ncol(X1)
+```
+
+```{r}
+str(Breast_data)
+```
+
+
+I have crafted a logistic regression model to analyze the Breast Cancer dataset. This model, named logreg_fit, has been meticulously fitted using a generalized linear modeling approach, encapsulating all available predictor variables within the dataset.
+
+
+```{r}
+logreg_fit = glm(y ~ ., data=Breast_data, family="binomial")
+```
+
+
+
+Summary shows "Cl.thickness", "Marg.adhesion", "Bare.nuclei", and "Bl.cromatin" as predictors with a statistically significant impact on the response variable, underlining their potential importance in the underlying phenomenon we are studying. On the other hand, predictors like Cell.size and Epith.c.size do not show a significant association. The model fits the data substantially better than a null model, as indicated by the lower residual deviance compared to the null deviance, and the AIC suggests a relatively good model fit. 
+
+
+```{r}
+summary(logreg_fit)
+```
+
+Utilizing the bestglm package in R, I've applied best subset selection to the Breast Cancer dataset to identify the most suitable model based on two criteria: the Akaike Information Criterion (AIC) and the Bayesian Information Criterion (BIC). This procedure evaluates all possible combinations of predictor variables to determine the model that best balances model fit with complexity.
+
+
+```{r include=FALSE}
+## Load the bestglm package
+library(bestglm)
+## Apply best subset selection
+bss_fit_AIC = bestglm(Breast_data, family=binomial, IC="AIC")
+bss_fit_BIC = bestglm(Breast_data, family=binomial, IC="BIC")
+```
+
+
+
+```{r }
+#bss_fit_AIC$Subsets
+```
+
+```{r include=FALSE}
+#bss_fit_BIC$Subsets
+```
+
+
+The best subset selection analysis for the Breast Cancer dataset reveals a distinct preference in model complexity: AIC favors a model with 7 predictors, indicating a tilt towards a more detailed representation, while BIC opts for a simpler model with just 5 predictors, highlighting its inclination towards parsimony and reduced risk of overfitting.
+
+
+```{r}
+## Identify best-fitting models
+(best_AIC = bss_fit_AIC$ModelReport$Bestk)
+(best_BIC = bss_fit_BIC$ModelReport$Bestk)
+```
+
+
+***Cross Validation***
+
+A 10-fold cross-validation method was implemented on the Breast Cancer dataset to evaluate model performance, ensuring reproducibility with a set random seed. A custom function, reg_cv, was used to compute the mean squared error across each fold, providing a measure of prediction accuracy. 
+
+
+```{r include=FALSE}
+## Set the seed to make the analysis reproducible
+set.seed(1)
+## 10-fold cross validation
+nfolds = 10
+## Sample fold-assignment index
+fold_index = sample(nfolds, n, replace=TRUE)
+## Print first few fold-assignments
+head(fold_index)
+
+```
+
+
+
+```{r}
+reg_cv = function(X1, y, fold_ind) {
+Xy = data.frame(X1, y=y)
+nfolds = max(fold_ind)
+if(!all.equal(sort(unique(fold_ind)), 1:nfolds)) stop("Invalid fold partition.")
+cv_errors = numeric(nfolds)
+for(fold in 1:nfolds) {
+tmp_fit = lm(y ~ ., data=Xy[fold_ind!=fold,])
+yhat = predict(tmp_fit, Xy[fold_ind==fold,])
+yobs = y[fold_ind==fold]
+cv_errors[fold] = mean((yobs - yhat)^2)
+}
+fold_sizes = numeric(nfolds)
+for(fold in 1:nfolds) fold_sizes[fold] = length(which(fold_ind==fold))
+test_error = weighted.mean(cv_errors, w=fold_sizes)
+return(test_error)
+}
+
+```
+
+
+
+```{r}
+#which(fold_index==3)
+```
+
+```{r}
+(bss_mse = reg_cv(Breast_data[,1:9], Breast_data[,10], fold_index))
+```
+
+
+
+The regsubsets function from the leaps package then exhaustively searched for the best subset of predictors, considering all possible combinations up to the maximum number of predictors. 
+
+
+```{r}
+## Apply the best subset selection algorithm
+bss_fit = regsubsets(y ~ ., data=Breast_data, method="exhaustive", nvmax=p)
+```
+
+
+
+```{r}
+## Summarise the results
+(bss_summary = summary(bss_fit))
+```
+
+I tried to identify the most influential predictor in a model containing only one variable (the "1-predictor model"). This identified predictor was then used to create a reduced dataset, Breast_data_red, containing only the selected variable along with the response variable. Finally, a logistic regression model (logreg1_fit) was fitted to this reduced dataset.
+
+
+```{r}
+pstar = 1
+## Check which predictors are in the 1-predictor model
+bss_fit_AIC$Subsets[pstar+1,]
+```
+
+
+```{r}
+## Construct a reduced data set containing only the selected predictor
+(indices = as.logical(bss_fit_AIC$Subsets[pstar+1, 2:(p+1)]))
+```
+
+
+Model summary analysis indicates a significant predictor (labeled X1...indices.) for breast cancer outcomes, evidenced by its substantial z-value and a highly significant p-value. The model shows a notable improvement over the null model, as indicated by the considerable reduction in residual deviance. With an AIC of 258.76 and 7 Fisher Scoring iterations, the model demonstrates both a good fit and efficient convergence.
+
+
+```{r}
+Breast_data_red = data.frame(X1[,indices], y)
+## Obtain regression coefficients for this model
+logreg1_fit = glm(y ~ ., data=Breast_data_red, family="binomial")
+summary(logreg1_fit)
+```
+
+```{r}
+reg_bss_cv = function(X1, y, best_models, fold_index) {
+p = ncol(X1)
+test_errors = numeric(p)
+for(k in 1:p) {
+test_errors[k] = reg_cv(X1[,best_models[k,]], y, fold_index)
+}
+return(test_errors)
+}
+```
+
+
+
+I implemented the reg_bss_cv function on the Breast Cancer dataset to identify the most accurate model through cross-validation, finding that a subset of six predictors yielded the lowest mean squared error, optimally balancing complexity and accuracy.
+
+
+```{r}
+## Apply the function to the Breast Cancer data
+bss_mse = reg_bss_cv(BreastCancer[,1:9], BreastCancer[,10], bss_summary$which[,-1], fold_index)
+## Identify model with the lowest error
+(best_cv = which.min(bss_mse))
+```
+
+In my analysis, I generated plots to compare model selection criteria; the AIC suggested a 7-predictor model, whereas the BIC indicated a 5-predictor model was more parsimonious. I decided on a 6-predictor model as it minimized the 10-fold cross-validation error, providing a balance between model complexity and predictive accuracy.
+
+
+```{r out.width="50%", fig.show='hold'}
+## Create multi-panel plotting device
+par(mfrow=c(1,2))
+## Produce plots, highlighting optimal value of k
+plot(0:9, bss_fit_AIC$Subsets$AIC, xlab="Number of predictors", ylab="AIC", type="b")
+points(best_AIC, bss_fit_AIC$Subsets$AIC[best_AIC+1], col="red", pch=16)
+plot(0:9, bss_fit_BIC$Subsets$BIC, xlab="Number of predictors", ylab="BIC", type="b")
+points(best_BIC, bss_fit_BIC$Subsets$BIC[best_BIC+1], col="red", pch=16)
+plot(1:9, bss_mse, xlab="Number of predictors", ylab="10-fold CV Error (Test Error)", type="b")
+points(best_cv, bss_mse[best_cv], col="red", pch=16)
+```
+
+
+
+
+
+**Regularization Methods**
+
+
+
+***Lasso Regression***
+
+
+In my report, I illustrated the impact of LASSO regularization on the predictor coefficients through a glmnet plot, showing how increasing the lambda parameter leads to the shrinkage of coefficients towards zero. This visualization effectively captures LASSO's characteristic of enforcing sparsity by pushing certain coefficients to become exactly zero at higher lambda values, which simplifies the model by excluding those predictors.
+
+
+```{r include=FALSE}
+library(glmnet)
+## Choose grid of values for the tuning parameter
+grid = 10^seq(-4, -1, length.out=100)
+## Fit a model with LASSO penalty for each value of the tuning parameter
+lasso_fit = glmnet(X1, y, family="binomial", alpha=1, standardize=FALSE, lambda=grid)
+```
+
+
+
+```{r out.width="50%"}
+## Examine the effect of the tuning parameter on the parameter estimates
+plot(lasso_fit, xvar="lambda", col=rainbow(p), label=TRUE)
+```
+
+
+
+*Cross Validation of Lasso Regression*
+
+
+The cross-validation plot for the LASSO model demonstrates that as the log(lambda) increases, the misclassification error first remains stable before rising sharply. This suggests there is an optimal range of lambda values where the model achieves a balance between penalty and accuracy
+
+
+```{r}
+lasso_cv_fit = cv.glmnet(X1, y, family="binomial", alpha=1, standardize=FALSE, lambda=grid,
+type.measure="class")
+```
+
+
+
+```{r out.width="50%"}
+plot(lasso_cv_fit)
+```
+
+
+I determined the optimal lambda for the LASSO model to be 0.01, which minimized the cross-validation error, suggesting it as the best regularization amount to avoid both overfitting and underfitting. After identifying this optimal lambda, I extracted the model's coefficients, revealing that variables such as 'Cl.thickness' and 'Bare.nuclei' are key contributors to the model, given their relatively large and positive coefficients, indicating a strong relationship with the outcome.
+
+
+```{r}
+## Identify the optimal value for the tuning parameter
+(lambda_lasso_min = lasso_cv_fit$lambda.min)
+```
+
+
+```{r}
+which_lambda_lasso = which(lasso_cv_fit$lambda == lambda_lasso_min)
+## Find the parameter estimates associated with optimal value of the tuning parameter
+coef(lasso_fit, s=lambda_lasso_min)
+```
+
+
+
+***Training Error***
+
+
+The confusion matrix from my logistic regression model shows that out of the total predictions made on the training data, 433 true negatives and 202 true positives were correctly identified, while 11 false positives and 37 false negatives were incorrectly predicted.
+
+```{r}
+## Compute predicted probabilities:
+phat = predict(logreg1_fit, Breast_data_red, type="response")
+## Compute fitted (i.e. predicted) values:
+yhat = ifelse(phat > 0.5, 1, 0)
+## Calculate confusion matrix:
+(confusion = table(Observed=y, Predicted=yhat))
+```
+
+I calculated the training error of the logistic regression model, which turned out to be approximately 0.07, indicating a high level of accuracy in the model's predictions on the training data.
+
+
+
+```{r}
+## Calculate the training error:
+1 - mean(y==yhat)
+```
+
+
+The confusion matrix for my LASSO model, using the optimal lambda of 0.01, indicates a strong predictive performance on the training data, with 435 true negatives and 228 true positives correctly classified, alongside a smaller number of 9 false positives and 11 false negatives.
+
+```{r}
+## Compute predicted probabilities:
+phat = predict(lasso_fit, X1, s=lambda_lasso_min, type="response")
+## Compute fitted (i.e. predicted) values:
+yhat = ifelse(phat > 0.5, 1, 0)
+## Calculate confusion matrix:
+(confusion = table(Observed=y, Predicted=yhat))
+```
+
+The training error for the LASSO model was computed to be around 0.03, indicating the proportion of incorrect predictions made by the model on the training dataset.
+
+
+```{r}
+## Calculate the training error:
+1 - mean(y==yhat)
+```
+
+
+
+***Test Error***
+
+
+After fitting a logistic regression model on the test data and computing the predicted values, the test error was determined to be approximately 0.03, indicating the model's effectiveness in generalizing to unseen data.
+
+
+```{r}
+## Fit logistic regression model to test data:
+logreg1_train = glm(y ~ ., data=Breast_data, family="binomial")
+```
+
+
+
+
+```{r}
+## Compute fitted values for the validation data:
+phat_test = predict(logreg1_train, Breast_data, type="response")
+yhat_test = ifelse(phat_test > 0.5, 1, 0)
+## Compute test error
+cv_lasso = 1 - mean(y == yhat_test)
+cv_lasso
+```
+
+
+
+**Ridge Regression**
+
+
+
+The graph displays the Ridge regression coefficients for the predictors across different values of log(lambda). Unlike LASSO, the Ridge regression coefficients decrease smoothly towards zero but do not reach zero, reflecting the nature of Ridge regression to shrink coefficients as a form of regularization without performing feature selection.
+
+
+```{r out.width="50%"}
+# Load necessary library
+library(glmnet)
+
+# Choose grid of values for the tuning parameter
+grid = 10^seq(-3, -1, length.out=100)
+
+# Fit a model with Ridge penalty for each value of the tuning parameter
+ridge_fit = glmnet(X1, y, family="binomial", alpha=0, standardize=FALSE, lambda=grid)
+
+# Examine the effect of the tuning parameter on the parameter estimates
+plot(ridge_fit, xvar="lambda", col=rainbow(p), label=TRUE)
+
+```
+
+
+
+
+*Cross Validation of Ridge Regression*
+
+
+I executed a cross-validation for the Ridge regression model, which is depicted in the graph illustrating how the misclassification error varies with different log(lambda) values. The plot demonstrates a steady misclassification error across various lambda values, indicating that the model's performance is robust to changes in the regularization strength within this specific lambda range.
+
+
+```{r out.width="50%"}
+# Cross-validation for Ridge regression
+ridge_cv_fit = cv.glmnet(X1, y, family="binomial", alpha=0, standardize=FALSE, lambda=grid, type.measure="class")
+
+# Plotting the cross-validation results
+plot(ridge_cv_fit)
+```
+
+
+This is error rate of cross validation for Ridge
+
+```{r}
+ridge_cv = mean(ridge_cv_fit$cvm)
+ridge_cv
+```
+
+In the Ridge regression analysis, the optimal lambda value minimizing the cross-validation error was identified, leading to a model with non-zero coefficients for all predictors. For instance, 'Cl.thickness' received a coefficient of approximately 0.739, and 'Bare.nuclei' had highest weights at around 0.841, indicating their strong predictive value. 
+
+
+```{r}
+# Identify the optimal value for the tuning parameter
+lambda_ridge_min = ridge_cv_fit$lambda.min
+
+# Find the lambda index
+which_lambda_ridge = which(ridge_cv_fit$lambda == lambda_ridge_min)
+
+# Find the parameter estimates associated with optimal value of the tuning parameter
+coef(ridge_fit, s=lambda_ridge_min)
+
+# Compute predicted probabilities:
+phat_ridge = predict(ridge_fit, X1, s=lambda_ridge_min, type="response")
+
+# Compute fitted (i.e. predicted) values:
+yhat_ridge = ifelse(phat_ridge > 0.5, 1, 0)
+
+# Calculate confusion matrix:
+confusion_ridge = table(Observed=y, Predicted=yhat_ridge)
+```
+
+
+
+
+**Linear Discriminant Analysis**
+
+
+Linear Discriminant Analysis (LDA) was performed using the nclSLR package on the Breast Cancer dataset, yielding discriminant functions, classification results, and an error rate. The discriminant functions' coefficients, such as -0.8757 for 'Cl.thickness' in the benign group (labeled 0) and 1.6269 in the malignant group (labeled 1), indicate how each predictor contributes to the classification. The confusion matrix reveals the model's high accuracy with 436 true negatives and 220 true positives, while misclassifying only 8 benign and 19 malignant cases, resulting in a low error rate of approximately 0.0395.
+
+
+```{r include=FALSE}
+## Load the nclSLR package
+library(nclSLR)
+lda_result = linDA(Breast_data[,1:9], Breast_data$y)
+```
+
+
+```{r}
+print(lda_result)
+```
+
+
+
+I found that the model's coefficients for 'Bare Nuclei' at 0.953 and 'Cl.thickness' at 0.515 were the most pronounced in distinguishing between the benign (group 0) and malignant (group 1) classes, which aligns with the observed group means where 'Bare Nuclei' averaged -0.603 for benign cases and 1.121 for malignant cases.
+
+
+```{r include=FALSE}
+library(MASS)
+```
+
+
+```{r}
+model <- lda(y~., data = Breast_data)
+model
+```
+
+
+
+
+The LDA-generated histograms of the Breast Cancer dataset show distinct score distributions for benign and malignant groups, affirming the model's effectiveness in differentiating between the two based on the analyzed predictors.
+
+
+```{r out.width="50%"}
+plot(model)
+```
+
+
+
+
+**Quadratic Discriminant Analysis**
+
+
+The Quadratic Discriminant Analysis (QDA) conducted on the Breast Cancer dataset resulted in a confusion matrix with 422 true negatives and 233 true positives, alongside 22 false positives and 6 false negatives, yielding an error rate of approximately 0.041.
+
+
+```{r}
+library(MASS)
+qda_result = quaDA(Breast_data[,1:9], Breast_data$y)
+print(qda_result)
+```
+
+
+
+
+Applying Quadratic Discriminant Analysis with the MASS package, I found significant disparities in group means between benign and malignant classes in the Breast Cancer dataset, notably 'Cl.thickness' (-0.524 vs. 0.974) and 'Bare Nuclei' (-0.603 vs. 1.121).
+
+
+```{r}
+library(MASS)
+# Fit the model
+model1 <- qda(y~., data = Breast_data)
+model1
+```
+
+
+
+
+***Group means of LDA and QDA***
+
+
+Linear Discriminant Analysis (LDA) achieved an accuracy of about 0.96, while Quadratic Discriminant Analysis (QDA) attained an accuracy of approximately 0.959 on the Breast Cancer dataset. The group means for both models showed clear distinctions between benign and malignant cases, particularly in predictors like 'Cl.thickness' and 'Bare Nuclei'. These results indicate that both LDA and QDA effectively classify cases, with LDA being slightly more accurate in this instance, possibly due to its assumption of equal covariance across groups.
+
+
+```{r}
+predictions <- model %>% predict(Breast_data)
+# Model accuracy
+mean(predictions$class==Breast_data$y)
+```
+
+
+```{r}
+# Make predictions
+predictions1 <- model1 %>% predict(Breast_data)
+# Model accuracy
+mean(predictions1$class == Breast_data$y)
+```
+
+
+
+
+***Cross Validation of all Models***
+
+
+In my comparative analysis of model performance using cross-validation, the Linear Discriminant Analysis (LDA) model showed the lowest test error at approximately 0.0395, closely followed by Quadratic Discriminant Analysis (QDA) at around 0.041, while the Lasso and Best Subset Cross Validation models recorded higher errors at 0.046 and 0.074 respectively. This suggests that, in this context, QDA and LDA are more effective than Lasso and Best Subset methods for predicting breast cancer outcomes.
+
+
+```{r}
+# Set the seed for reproducibility
+set.seed(1)
+# Define the number of folds
+nfolds = 10
+# Create the fold indices
+fold_indices = sample(1:nfolds, nrow(Breast_data), replace = TRUE)
+
+```
+
+
+```{r}
+# Function for cross-validation in LDA and QDA
+cv_discriminant = function(X, y, model_type, fold_indices) {
+    errors = numeric(nfolds)
+    for (i in 1:nfolds) {
+        train_indices = which(fold_indices != i)
+        test_indices = which(fold_indices == i)
+
+        # Fit the model on training data
+        if (model_type == "lda") {
+            model = lda(X[train_indices,], grouping = y[train_indices])
+        } else if (model_type == "qda") {
+            model = qda(X[train_indices,], grouping = y[train_indices])
+        }
+
+        # Predict on test data
+        predictions = predict(model, X[test_indices,])$class
+
+        # Calculate the test error
+        errors[i] = mean(y[test_indices] != predictions)
+    }
+    mean(errors)
+}
+
+# Calculate cross-validation error for LDA
+cv_error_qda = cv_discriminant(Breast_data[,1:9], Breast_data$y, "qda", fold_indices)
+
+# Calculate cross-validation error for QDA
+cv_error_lda = cv_discriminant(Breast_data[,1:9], Breast_data$y, "lda", fold_indices)
+
+```
+
+
+
+
+
+```{r}
+# Combine all CV errors into a data frame for comparison
+cv_errors1 = data.frame(Model = c("Best Subset Cross validation", "Lasso", "LDA", "QDA"),
+                       Error = c(bss_mse, cv_lasso, lda_result$error_rate, qda_result$error_rate))
+
+table = rbind(head(cv_errors1, 2), tail(cv_errors1, 2))
+
+# Print the merged table
+print(table)
+
+
+```
+
+
+
+**Best Classifier**
+
+I select the Linear Discriminant Analysis (LDA) as the final "best" classifier for the Breast Cancer dataset. This choice is justified by its lowest cross-validation test error of approximately 0.0395, indicating a superior balance between sensitivity and specificity compared to other models tested. 
+LDA inherently does not enforce feature selection or coefficient shrinkage, unlike methods like Lasso. Therefore, it typically includes all predictor variables in the model. This inclusion is advantageous in this scenario because the Breast Cancer dataset likely contains complex interactions and varying covariance structures within classes, conditions under which LDA excels. By leveraging the distinct covariance of each class, LDA can capture more nuanced patterns in the data, essential for accurate classification in complex medical datasets like this one.
+
